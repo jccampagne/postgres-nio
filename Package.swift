@@ -14,7 +14,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "CMD5", dependencies: []),
-        .target(name: "PostgresNIO", dependencies: ["CMD5", "Logging", "Metrics", "NIO", "NIOSSL"]),
+        .target(name: "PostgresNIO", dependencies: [
+            "CMD5", "Logging", "Metrics", "NIO", "NIOSSL", "NIOFoundationCompat"
+        ]),
         .testTarget(name: "PostgresNIOTests", dependencies: ["PostgresNIO"]),
     ]
 )

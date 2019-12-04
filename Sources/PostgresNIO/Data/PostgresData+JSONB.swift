@@ -1,23 +1,7 @@
 import Foundation
 
-fileprivate let jsonBVersionBytes: [UInt8] = [0x01]
 
 extension PostgresData {
-    public init(jsonb jsonData: Data) {
-        let jsonBDataBytes = [UInt8](jsonData)
-        
-        var buffer = ByteBufferAllocator().buffer(capacity: jsonBVersionBytes.count + jsonBDataBytes.count)
-        buffer.writeBytes(jsonBVersionBytes)
-        buffer.writeBytes(jsonBDataBytes)
-        
-        self.init(type: .jsonb, formatCode: .binary, value: buffer)
-    }
-
-    public init<T>(jsonb value: T) throws where T: Encodable {
-        let jsonData = try JSONEncoder().encode(value)
-        self.init(jsonb: jsonData)
-    }
-
     public var jsonb: Data? {
         guard var value = self.value else {
             return nil
@@ -43,16 +27,11 @@ extension PostgresData {
     }
 }
 
-public protocol PostgresJSONBCodable: Codable, PostgresDataConvertible {
-}
+public protocol PostgresJSONBCodable: Codable, PostgresBind, PostgresDataConvertible { }
 
 extension PostgresJSONBCodable {
     public static var postgresDataType: PostgresDataType {
         return .jsonb
-    }
-    
-    public var postgresData: PostgresData? {
-        return try? .init(jsonb: self)
     }
     
     public init?(postgresData: PostgresData) {
@@ -61,4 +40,21 @@ extension PostgresJSONBCodable {
         }
         self = value
     }
+    
+    public func postgresData(type: PostgresDataType) -> ByteBuffer? {
+        switch type {
+        case .jsonb:
+            guard let data = try? JSONEncoder().encode(self) else {
+                return nil
+            }
+            var buffer = ByteBufferAllocator().buffer(capacity: jsonBVersionBytes.count + data.count)
+            buffer.writeBytes(jsonBVersionBytes)
+            buffer.writeBytes(data)
+            return buffer
+        default:
+            return nil
+        }
+    }
 }
+
+private let jsonBVersionBytes: [UInt8] = [0x01]

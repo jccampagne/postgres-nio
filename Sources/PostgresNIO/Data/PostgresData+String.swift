@@ -80,3 +80,16 @@ extension String: PostgresDataConvertible {
         self = string
     }
 }
+
+extension String: PostgresBind {
+    public func postgresData(type: PostgresDataType) -> ByteBuffer? {
+        switch type {
+        case .varchar, .text:
+            var buffer = ByteBufferAllocator().buffer(capacity: self.utf8.count)
+            buffer.writeString(self)
+            return buffer
+        default:
+            return nil
+        }
+    }
+}

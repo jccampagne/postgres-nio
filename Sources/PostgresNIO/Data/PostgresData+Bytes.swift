@@ -1,4 +1,5 @@
 import struct Foundation.Data
+import NIOFoundationCompat
 
 extension PostgresData {
     public init<Bytes>(bytes: Bytes)
@@ -34,5 +35,18 @@ extension Data: PostgresDataConvertible {
             return nil
         }
         self.init(bytes)
+    }
+}
+
+extension Data: PostgresBind {
+    public func postgresData(type: PostgresDataType) -> ByteBuffer? {
+        switch type {
+        case .bytea:
+            var buffer = ByteBufferAllocator().buffer(capacity: self.count)
+            buffer.writeBytes(self)
+            return buffer
+        default:
+            return nil
+        }
     }
 }

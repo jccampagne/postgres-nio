@@ -1,13 +1,6 @@
 import Foundation
 
 extension PostgresData {
-    public init(date: Date) {
-        var buffer = ByteBufferAllocator().buffer(capacity: 0)
-        let seconds = date.timeIntervalSince(_psqlDateStart) * Double(_microsecondsPerSecond)
-        buffer.writeInteger(Int64(seconds))
-        self.init(type: .timestamptz, value: buffer)
-    }
-    
     public var date: Date? {
         guard var value = self.value else {
             return nil
@@ -46,9 +39,19 @@ extension Date: PostgresDataConvertible {
         }
         self = date
     }
-    
-    public var postgresData: PostgresData? {
-        return .init(date: self)
+}
+
+extension Date: PostgresBind {
+    public func postgresData(type: PostgresDataType) -> ByteBuffer? {
+        switch type {
+        case .timestamptz, .timestamp:
+            var buffer = ByteBufferAllocator().buffer(capacity: 0)
+            let seconds = self.timeIntervalSince(_psqlDateStart) * Double(_microsecondsPerSecond)
+            buffer.writeInteger(Int64(seconds))
+            return buffer
+        default:
+            return nil
+        }
     }
 }
 

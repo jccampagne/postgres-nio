@@ -6,13 +6,15 @@ extension Optional: PostgresDataConvertible where Wrapped: PostgresDataConvertib
     public init?(postgresData: PostgresData) {
         self = Wrapped.init(postgresData: postgresData)
     }
+}
 
-    public var postgresData: PostgresData? {
+extension Optional: PostgresBind where Wrapped: PostgresBind {
+    public func postgresData(type: PostgresDataType) -> ByteBuffer? {
         switch self {
-        case .some(let wrapped):
-            return wrapped.postgresData
         case .none:
-            return PostgresData.null
+            return nil
+        case .some(let bind):
+            return bind.postgresData(type: type)
         }
     }
 }

@@ -1,10 +1,4 @@
 extension PostgresData {
-    public init(bool: Bool) {
-        var buffer = ByteBufferAllocator().buffer(capacity: 1)
-        buffer.writeInteger(bool ? 1 : 0, as: UInt8.self)
-        self.init(type: .bool, formatCode: .binary, value: buffer)
-    }
-    
     public var bool: Bool? {
         guard var value = self.value else {
             return nil
@@ -39,19 +33,9 @@ extension PostgresData {
     }
 }
 
-extension PostgresData: ExpressibleByBooleanLiteral {
-    public init(booleanLiteral value: Bool) {
-        self.init(bool: value)
-    }
-}
-
 extension Bool: PostgresDataConvertible {
     public static var postgresDataType: PostgresDataType {
         return .bool
-    }
-    
-    public var postgresData: PostgresData? {
-        return .init(bool: self)
     }
     
     public init?(postgresData: PostgresData) {
@@ -59,5 +43,18 @@ extension Bool: PostgresDataConvertible {
             return nil
         }
         self = bool
+    }
+}
+
+extension Bool: PostgresBind {
+    public func postgresData(type: PostgresDataType) -> ByteBuffer? {
+        switch type {
+        case .bool:
+            var buffer = ByteBufferAllocator().buffer(capacity: 1)
+            buffer.writeInteger(self ? 1 : 0, as: UInt8.self)
+            return buffer
+        default:
+            return nil
+        }
     }
 }

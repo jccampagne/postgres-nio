@@ -241,8 +241,7 @@ final class NIOPostgresTests: XCTestCase {
         _ = try conn.simpleQuery("drop table if exists person;").wait()
         _ = try conn.simpleQuery("create table person(id serial primary key, first_name text, last_name text);").wait()
         defer { _ = try! conn.simpleQuery("drop table person;").wait() }
-        let id = PostgresData(int32: 5)
-        _ = try conn.query("SELECT id, first_name, last_name FROM person WHERE id = $1", [id]).wait()
+        _ = try conn.query("SELECT id, first_name, last_name FROM person WHERE id = $1", [5]).wait()
     }
 
     // https://github.com/vapor/nio-postgres/issues/21
@@ -284,11 +283,7 @@ final class NIOPostgresTests: XCTestCase {
             $1::numeric::text as a,
             $2::numeric::text as b,
             $3::numeric::text as c
-        """, [
-            .init(numeric: a),
-            .init(numeric: b),
-            .init(numeric: c)
-        ]).wait()
+        """, [a, b, c]).wait()
         XCTAssertEqual(rows[0].column("a")?.string, "123456.789123")
         XCTAssertEqual(rows[0].column("b")?.string, "-123456.789123")
         XCTAssertEqual(rows[0].column("c")?.string, "3.14159265358979")
@@ -349,7 +344,7 @@ final class NIOPostgresTests: XCTestCase {
         select
             $1::int8[] as array
         """, [
-            PostgresData(array: [1, 2, 3])
+            [1, 2, 3]
         ]).wait()
         XCTAssertEqual(rows[0].column("array")?.array(of: Int.self), [1, 2, 3])
     }
@@ -361,7 +356,7 @@ final class NIOPostgresTests: XCTestCase {
         select
             $1::int8[] as array
         """, [
-            PostgresData(array: [] as [Int])
+            [] as [Int]
         ]).wait()
         XCTAssertEqual(rows[0].column("array")?.array(of: Int.self), [])
     }
@@ -391,13 +386,13 @@ final class NIOPostgresTests: XCTestCase {
         let conn = try PostgresConnection.test(on: eventLoop).wait()
         defer { try! conn.close().wait() }
         let rows = try conn.query("select $1::bytea as bytes", [
-            PostgresData(bytes: [1, 2, 3])
+            Data([1, 2, 3])
         ]).wait()
         XCTAssertEqual(rows[0].column("bytes")?.bytes, [1, 2, 3])
     }
     
     func testJSONBSerialize() throws {
-        struct Object: Codable {
+        struct Object: PostgresJSONBCodable {
             let foo: Int
             let bar: Int
         }
@@ -405,8 +400,9 @@ final class NIOPostgresTests: XCTestCase {
         let conn = try PostgresConnection.test(on: eventLoop).wait()
         defer { try! conn.close().wait() }
         do {
-            let postgresData = try PostgresData(jsonb: Object(foo: 1, bar: 2))
-            let rows = try conn.query("select $1::jsonb as jsonb", [postgresData]).wait()
+            let rows = try conn.query("select $1::jsonb as jsonb", [
+                Object(foo: 1, bar: 2)
+            ]).wait()
             
             let object = try rows[0].column("jsonb")?.jsonb(as: Object.self)
             XCTAssertEqual(object?.foo, 1)
@@ -430,10 +426,9 @@ final class NIOPostgresTests: XCTestCase {
 
         XCTAssertEqual(Object.postgresDataType, .jsonb)
 
-        let postgresData = Object(foo: 1, bar: 2).postgresData
-        XCTAssertEqual(postgresData?.type, .jsonb)
-        
-        let object = Object(postgresData: postgresData!)
+        let buffer = Object(foo: 1, bar: 2).postgresData(type: .jsonb)
+        XCTAssertNotEqual(buffer?.readableBytes, 0)
+        let object = Object(postgresData: .init(type: .jsonb, typeModifier: nil, formatCode: .binary, value: buffer))
         XCTAssertEqual(object?.foo, 1)
         XCTAssertEqual(object?.bar, 2)
     }
@@ -547,14 +542,14 @@ final class NIOPostgresTests: XCTestCase {
         let conn = try PostgresConnection.test(on: eventLoop).wait()
         defer { try! conn.close().wait() }
         let rows = try conn.query(query, [
-            PostgresData(uuid: UUID(uuidString: "D2710E16-EB07-4FD6-A87E-B1BE41C9BD3D")!),
-            PostgresData(int: Int(0)),
-            PostgresData(date: Date(timeIntervalSince1970: 0)),
-            PostgresData(date: Date(timeIntervalSince1970: 0)),
-            PostgresData(string: "Foo"),
-            PostgresData(array: ["US"]),
-            PostgresData(array: ["en"]),
-            PostgresData(array: ["USD", "DKK"]),
+            UUID(uuidString: "D2710E16-EB07-4FD6-A87E-B1BE41C9BD3D")!,
+            0,
+            Date(timeIntervalSince1970: 0),
+            Date(timeIntervalSince1970: 0),
+            "Foo",
+            ["US"],
+            ["en"],
+            ["USD", "DKK"],
         ]).wait()
         XCTAssertEqual(rows[0].column("countries")?.array(of: String.self), ["US"])
         XCTAssertEqual(rows[0].column("languages")?.array(of: String.self), ["en"])
@@ -570,7 +565,7 @@ final class NIOPostgresTests: XCTestCase {
         let conn = try PostgresConnection.test(on: eventLoop).wait()
         defer { try! conn.close().wait() }
         do {
-            _ = try conn.query(query, [.init(date: date)]).wait()
+            _ = try conn.query(query, [date]).wait()
             XCTFail("should have failed")
         } catch PostgresError.server(let error) {
             XCTAssertEqual(error.fields[.routine], "report_invalid_encoding")
@@ -618,7 +613,7 @@ final class NIOPostgresTests: XCTestCase {
             """
                 "int" int8,
             """,
-            fixtureData: [PostgresData(int: 1234)],
+            fixtureData: [1234],
             on: self.eventLoop
         )
         defer { _ = try! conn.simpleQuery("DROP TABLE \"measureSelectPerformance\"").wait() }
@@ -653,12 +648,7 @@ final class NIOPostgresTests: XCTestCase {
                 "date" timestamptz,
                 "uuid" uuid,
             """,
-            fixtureData: [
-                PostgresData(string: "foo"),
-                PostgresData(int: 0),
-                now.postgresData!,
-                PostgresData(uuid: uuid)
-            ],
+            fixtureData: ["foo", 0, now, uuid],
             on: self.eventLoop
         )
         defer { _ = try! conn.simpleQuery("DROP TABLE \"measureSelectPerformance\"").wait() }
@@ -714,26 +704,26 @@ final class NIOPostgresTests: XCTestCase {
                 "uuid5" uuid,
             """,
             fixtureData: [
-                PostgresData(string: "string1"),
-                PostgresData(string: "string2"),
-                PostgresData(string: "string3"),
-                PostgresData(string: "string4"),
-                PostgresData(string: "string5"),
-                PostgresData(int: 1),
-                PostgresData(int: 2),
-                PostgresData(int: 3),
-                PostgresData(int: 4),
-                PostgresData(int: 5),
-                now.postgresData!,
-                now.postgresData!,
-                now.postgresData!,
-                now.postgresData!,
-                now.postgresData!,
-                PostgresData(uuid: uuid),
-                PostgresData(uuid: uuid),
-                PostgresData(uuid: uuid),
-                PostgresData(uuid: uuid),
-                PostgresData(uuid: uuid)
+                "string1",
+                "string2",
+                "string3",
+                "string4",
+                "string5",
+                1,
+                2,
+                3,
+                4,
+                5,
+                now,
+                now,
+                now,
+                now,
+                now,
+                uuid,
+                uuid,
+                uuid,
+                uuid,
+                uuid
             ],
             on: self.eventLoop
         )
@@ -782,7 +772,7 @@ final class NIOPostgresTests: XCTestCase {
         try prepareTableToMeasureSelectPerformance(
             rowCount: 50_000, batchSize: 200,
             schema: fieldNames.map { "\"\($0)\" int8" }.joined(separator: ", ") + ",",
-            fixtureData: fieldIndices.map { PostgresData(int: $0) },
+            fixtureData: fieldIndices,
             on: self.eventLoop
         )
         defer { _ = try! conn.simpleQuery("DROP TABLE \"measureSelectPerformance\"").wait() }
@@ -813,7 +803,7 @@ final class NIOPostgresTests: XCTestCase {
         try prepareTableToMeasureSelectPerformance(
             rowCount: 10_000, batchSize: 200,
             schema: fieldNames.map { "\"\($0)\" int8" }.joined(separator: ", ") + ",",
-            fixtureData: fieldIndices.map { PostgresData(int: $0) },
+            fixtureData: fieldIndices,
             on: self.eventLoop
         )
         defer { _ = try! conn.simpleQuery("DROP TABLE \"measureSelectPerformance\"").wait() }
@@ -848,7 +838,7 @@ private func prepareTableToMeasureSelectPerformance(
     rowCount: Int,
     batchSize: Int = 1_000,
     schema: String,
-    fixtureData: [PostgresData],
+    fixtureData: [PostgresBind],
     on eventLoop: EventLoop,
     file: StaticString = #file,
     line: UInt = #line
@@ -875,11 +865,11 @@ private func prepareTableToMeasureSelectPerformance(
             + ")"
         }.joined(separator: ", ")
     let insertQuery = "INSERT INTO \"measureSelectPerformance\" VALUES \(insertArgumentsPlaceholder)"
-    var batchedFixtureData = Array(repeating: [PostgresData(int: 0)] + fixtureData, count: batchSize).flatMap { $0 }
+    var batchedFixtureData: [PostgresBind] = Array(repeating: [0] + fixtureData, count: batchSize).flatMap { $0 }
     for batchIndex in 0..<(rowCount / batchSize) {
         for indexInBatch in 0..<batchSize {
             let rowIndex = batchIndex * batchSize + indexInBatch
-            batchedFixtureData[indexInBatch * totalArgumentsPerRow] = PostgresData(int: rowIndex)
+            batchedFixtureData[indexInBatch * totalArgumentsPerRow] = rowIndex
         }
         _ = try conn.query(insertQuery, batchedFixtureData).wait()
     }

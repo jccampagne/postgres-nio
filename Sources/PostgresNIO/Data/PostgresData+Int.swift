@@ -195,3 +195,16 @@ extension PostgresData: ExpressibleByIntegerLiteral {
         self.init(int: value)
     }
 }
+
+extension Int: PostgresBind {
+    public func postgresData(type: PostgresDataType) -> ByteBuffer? {
+        switch type {
+        case .int8:
+            var buffer = ByteBufferAllocator().buffer(capacity: 8)
+            buffer.writeInteger(self)
+            return buffer
+        default:
+            return nil
+        }
+    }
+}

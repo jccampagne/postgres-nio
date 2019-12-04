@@ -201,17 +201,6 @@ public struct PostgresNumeric: CustomStringConvertible, CustomDebugStringConvert
 }
 
 extension PostgresData {
-    public init(numeric: PostgresNumeric) {
-        var buffer = ByteBufferAllocator().buffer(capacity: 0)
-        buffer.writeInteger(numeric.ndigits, endianness: .big)
-        buffer.writeInteger(numeric.weight, endianness: .big)
-        buffer.writeInteger(numeric.sign, endianness: .big)
-        buffer.writeInteger(numeric.dscale, endianness: .big)
-        var value = numeric.value
-        buffer.writeBuffer(&value)
-        self.init(type: .numeric, value: buffer)
-    }
-    
     public var numeric: PostgresNumeric? {
         /// create mutable value since we will be using `.extract` which advances the buffer's view
         guard var value = self.value else {
@@ -224,6 +213,24 @@ extension PostgresData {
         }
 
         return metadata
+    }
+}
+
+extension PostgresNumeric: PostgresBind {
+    public func postgresData(type: PostgresDataType) -> ByteBuffer? {
+        switch type {
+        case .numeric:
+            var buffer = ByteBufferAllocator().buffer(capacity: 0)
+            buffer.writeInteger(self.ndigits, endianness: .big)
+            buffer.writeInteger(self.weight, endianness: .big)
+            buffer.writeInteger(self.sign, endianness: .big)
+            buffer.writeInteger(self.dscale, endianness: .big)
+            var value = self.value
+            buffer.writeBuffer(&value)
+            return buffer
+        default:
+            return nil
+        }
     }
 }
 

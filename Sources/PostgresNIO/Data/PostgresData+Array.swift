@@ -1,39 +1,4 @@
 extension PostgresData {
-    public init<T>(array: [T])
-        where T: PostgresDataConvertible
-    {
-        let elementType = T.postgresDataType
-        guard let arrayType = elementType.arrayType else {
-            fatalError("No array type for \(elementType)")
-        }
-        var buffer = ByteBufferAllocator().buffer(capacity: 0)
-        // 0 if empty, 1 if not
-        buffer.writeInteger(array.isEmpty ? 0 : 1, as: UInt32.self)
-        // b
-        buffer.writeInteger(0, as: UInt32.self)
-        // array element type
-        buffer.writeInteger(elementType.rawValue)
-
-        // continue if the array is not empty
-        if !array.isEmpty {
-            // length of array
-            buffer.writeInteger(numericCast(array.count), as: UInt32.self)
-            // dimensions
-            buffer.writeInteger(1, as: UInt32.self)
-
-            for item in array {
-                if var value = item.postgresData?.value {
-                    buffer.writeInteger(numericCast(value.readableBytes), as: UInt32.self)
-                    buffer.writeBuffer(&value)
-                } else {
-                    buffer.writeInteger(0, as: UInt32.self)
-                }
-            }
-        }
-
-        self.init(type: arrayType, typeModifier: nil, formatCode: .binary, value: buffer)
-    }
-
     public func array<T>(of type: T.Type = T.self) -> [T]?
         where T: PostgresDataConvertible
     {
@@ -97,8 +62,38 @@ extension Array: PostgresDataConvertible where Element: PostgresDataConvertible 
         }
         self = array
     }
+}
 
-    public var postgresData: PostgresData? {
-        return PostgresData(array: self)
+extension Array: PostgresBind where Element: PostgresBind {
+    public func postgresData(type arrayType: PostgresDataType) -> ByteBuffer? {
+        guard let elementType = arrayType.elementType else {
+            return nil
+        }
+        var buffer = ByteBufferAllocator().buffer(capacity: 0)
+        // 0 if empty, 1 if not
+        buffer.writeInteger(self.isEmpty ? 0 : 1, as: UInt32.self)
+        // b
+        buffer.writeInteger(0, as: UInt32.self)
+        // array element type
+        buffer.writeInteger(arrayType.rawValue)
+
+        // continue if the array is not empty
+        if !self.isEmpty {
+            // length of array
+            buffer.writeInteger(numericCast(self.count), as: UInt32.self)
+            // dimensions
+            buffer.writeInteger(1, as: UInt32.self)
+
+            for item in self {
+                if var value = item.postgresData(type: elementType) {
+                    buffer.writeInteger(numericCast(value.readableBytes), as: UInt32.self)
+                    buffer.writeBuffer(&value)
+                } else {
+                    buffer.writeInteger(0, as: UInt32.self)
+                }
+            }
+        }
+
+        return buffer
     }
 }
